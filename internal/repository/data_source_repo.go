@@ -2,11 +2,11 @@ package repository
 
 import (
 	"context"
-	"encoding/base64"
 	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/muyue/comic-harmony-backend/internal/datasource"
 	"github.com/muyue/comic-harmony-backend/internal/model"
 )
 
@@ -20,26 +20,33 @@ type DataSourceRepository interface {
 }
 
 type dataSourceRepo struct {
-	pool *pgxpool.Pool
+	pool     *pgxpool.Pool
+	encKey   []byte // AES-256 key
 }
 
-func NewDataSourceRepository(pool *pgxpool.Pool) DataSourceRepository {
-	return &dataSourceRepo{pool: pool}
+// NewDataSourceRepository creates a repo that encrypts passwords with the given key.
+// key is used to derive a 32-byte AES-256 key via SHA-256.
+func NewDataSourceRepository(pool *pgxpool.Pool, encKey string) DataSourceRepository {
+	return &dataSourceRepo{
+		pool:   pool,
+		encKey: datasource.DeriveKey([]byte(encKey)),
+	}
 }
 
-func encodePassword(pwd string) string {
-	return base64.StdEncoding.EncodeToString([]byte(pwd))
+func (r *dataSourceRepo) encrypt(pwd string) string {
+	e, _ := datasource.EncryptPassword(pwd, r.encKey)
+	return e
 }
 
-func decodePassword(encoded string) string {
-	b, err := base64.StdEncoding.DecodeString(encoded)
+func (r *dataSourceRepo) decrypt(encoded string) string {
+	d, err := datasource.DecryptPassword(encoded, r.encKey)
 	if err != nil {
 		return ""
 	}
-	return string(b)
+	return d
 }
 
-func scanDataSource(row pgx.Row) (*model.DataSource, error) {
+func scanDataSource(row pgx.Row, repo *dataSourceRepo) (*model.DataSource, error) {
 	var ds model.DataSource
 	var lastHealth *time.Time
 	var pwd string
@@ -51,7 +58,7 @@ func scanDataSource(row pgx.Row) (*model.DataSource, error) {
 	if err != nil {
 		return nil, err
 	}
-	ds.Password = decodePassword(pwd)
+	ds.Password = repo.decrypt(pwd)
 	ds.LastHealth = lastHealth
 	return &ds, nil
 }
@@ -62,7 +69,7 @@ func (r *dataSourceRepo) Create(ctx context.Context, ds *model.DataSource) error
 		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 		 RETURNING id, created_at, updated_at`,
 		ds.UserID, ds.Name, ds.SourceType, ds.URL,
-		ds.Username, encodePassword(ds.Password),
+		ds.Username, r.encrypt(ds.Password),
 		ds.RootPath, ds.Enabled,
 	).Scan(&ds.ID, &ds.CreatedAt, &ds.UpdatedAt)
 	return err
@@ -73,7 +80,7 @@ func (r *dataSourceRepo) GetByID(ctx context.Context, id int64) (*model.DataSour
 		`SELECT id, user_id, name, source_type, url, username, password, root_path,
 		        enabled, last_health, created_at, updated_at
 		 FROM data_sources WHERE id = $1`, id)
-	return scanDataSource(row)
+	return scanDataSource(row, r)
 }
 
 func (r *dataSourceRepo) ListByUser(ctx context.Context, userID int64) ([]model.DataSource, error) {
@@ -87,7 +94,7 @@ func (r *dataSourceRepo) ListByUser(ctx context.Context, userID int64) ([]model.
 	defer rows.Close()
 	var sources []model.DataSource
 	for rows.Next() {
-		ds, err := scanDataSource(rows)
+		ds, err := scanDataSource(rows, r)
 		if err != nil {
 			return nil, err
 		}
@@ -102,7 +109,7 @@ func (r *dataSourceRepo) Update(ctx context.Context, ds *model.DataSource) error
 		 password=$5, root_path=$6, enabled=$7, updated_at=NOW()
 		 WHERE id=$8`,
 		ds.Name, ds.SourceType, ds.URL, ds.Username,
-		encodePassword(ds.Password), ds.RootPath, ds.Enabled, ds.ID,
+		r.encrypt(ds.Password), ds.RootPath, ds.Enabled, ds.ID,
 	)
 	return err
 }
@@ -123,7 +130,7 @@ func (r *dataSourceRepo) GetAll(ctx context.Context) ([]model.DataSource, error)
 	defer rows.Close()
 	var sources []model.DataSource
 	for rows.Next() {
-		ds, err := scanDataSource(rows)
+		ds, err := scanDataSource(rows, r)
 		if err != nil {
 			return nil, err
 		}

@@ -26,6 +26,9 @@ type Config struct {
 	// Upload
 	UploadDir    string
 	UploadMaxMB  int64
+
+	// Encryption
+	DataEncryptionKey string
 }
 
 func Load() *Config {
@@ -51,6 +54,10 @@ func Load() *Config {
 		// Upload
 		UploadDir:   getEnv("UPLOAD_DIR", "./uploads"),
 		UploadMaxMB: getEnvInt64("UPLOAD_MAX_MB", 500),
+
+		// Encryption
+		DataEncryptionKey: getEnv("DATA_ENCRYPTION_KEY",
+			"comic-harmony-encryption-key-change-in-prod"),
 	}
 }
 

@@ -43,13 +43,35 @@ func (h *UploadHandler) Upload(w http.ResponseWriter, r *http.Request) {
 	}
 	defer file.Close()
 
-	ext := filepath.Ext(header.Filename)
+	// --- Security checks ---
+
+	// 1. Content-Type validation
+	contentType := header.Header.Get("Content-Type")
+	if !IsContentTypeAllowed(contentType) {
+		actual := contentType
+		if actual == "" {
+			actual = "unknown"
+		}
+		response.BadRequest(w, fmt.Sprintf("unsupported content type: %s", actual))
+		return
+	}
+
+	// 2. Extension check
 	if !IsSupported(header.Filename) {
+		ext := filepath.Ext(header.Filename)
 		response.BadRequest(w, fmt.Sprintf("unsupported format: %s (supported: %v)", ext, SupportedFormats))
 		return
 	}
 
+	// 3. Sanitize filename (prevent path traversal)
+	safeName := SanitizeFilename(header.Filename)
+	if safeName != header.Filename {
+		response.BadRequest(w, "invalid filename")
+		return
+	}
+
 	// Save uploaded file to temp
+	ext := filepath.Ext(header.Filename)
 	tmpFile := filepath.Join(h.tempDir, fmt.Sprintf("upload-%d%s", time.Now().UnixNano(), ext))
 	dst, err := os.Create(tmpFile)
 	if err != nil {
@@ -66,7 +88,7 @@ func (h *UploadHandler) Upload(w http.ResponseWriter, r *http.Request) {
 	dst.Close()
 
 	// Process upload
-	result, err := h.svc.ProcessUpload(r.Context(), tmpFile, header.Filename)
+	result, err := h.svc.ProcessUpload(r.Context(), tmpFile, safeName)
 	if err != nil {
 		response.BadRequest(w, fmt.Sprintf("processing failed: %v", err))
 		return
