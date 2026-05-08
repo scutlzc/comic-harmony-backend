@@ -26,3 +26,4 @@ uploads/temp/*
 
 # Logs
 *.log
+session-*.log.md
