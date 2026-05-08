@@ -1,0 +1,12 @@
+.env
+.env.*
+.git
+.gitignore
+bin/
+server
+uploads/comics/*
+!uploads/comics/.gitkeep
+uploads/temp/*
+!uploads/temp/.gitkeep
+*.md
+*.log

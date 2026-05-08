@@ -1,0 +1,28 @@
+# Binary
+server
+bin/
+*.exe
+
+# Environment
+.env
+.env.*
+!.env.docker
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Uploads (keep structure)
+uploads/comics/*
+!uploads/comics/.gitkeep
+uploads/temp/*
+!uploads/temp/.gitkeep
+
+# Logs
+*.log
