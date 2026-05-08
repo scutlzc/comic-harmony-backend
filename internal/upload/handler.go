@@ -17,11 +17,14 @@ type UploadHandler struct {
 	maxSize  int64
 }
 
-func NewUploadHandler(svc *UploadService, tempDir string) *UploadHandler {
+func NewUploadHandler(svc *UploadService, tempDir string, maxSizeMB int64) *UploadHandler {
+	if maxSizeMB <= 0 {
+		maxSizeMB = 500
+	}
 	return &UploadHandler{
 		svc:     svc,
 		tempDir: tempDir,
-		maxSize: 500 << 20, // 500MB
+		maxSize: maxSizeMB << 20, // MB → bytes
 	}
 }
 
